@@ -313,3 +313,131 @@ You can change the inner service name if you want to:
             ->addArgument(new Reference('bar.wooz'))
             ->setPublic(false)
             ->setDecoratedService('foo', 'bar.wooz');
+
+Software Layers
+--------
+
+Dependency Injection is awesome to write complex and flexible systems.
+
+It is so easy to stick any kind of service in any kind of service.
+Often people think that this is one of the benefits using dependency injection.
+That's totally fine for small projects but the truth is that you will end up in a huge mess
+if you're working on projects with a massive amount of services
+and don't care about which kind of service is allowed to be injected in which kind of services.
+
+Consider you have an infrastructure and a domain layer.
+You may want to inject services from your infrastructure layer to services that lives in the domain layer.
+But your infrastructure layer shouldn't depend on any kind of domain services.
+
+The Dependency Injection Component allows you to define rules that enforces software layers.
+
+.. code-block:: php
+
+    class SomeBundle extends Bundle {
+
+        public function build(ContainerBuilder $container)
+        {
+            parent::build($container);
+
+            $container->getLayerRuleBuilder()
+                ->layerCanDependOn('controller', 'domain')
+                ->layerCanDependOn('domain', 'infrastructure')
+            ;
+        }
+    }
+
+The layer a service will live in is defined in the Configuration file:
+
+.. configuration-block::
+
+    .. code-block:: xml
+
+       <service id="some_service_id" class="DomainServiceA">
+            <layer name="domain" />
+       </service>
+
+    .. code-block:: yaml
+
+        some_service_id:
+            layer:
+                - domain
+
+    .. code-block:: php
+
+        $container->register('some_service_id')
+            ->setLayers(array('domain'))
+
+
+By default any service definition will live in a software layer defined as "default" (ContainerInterface::LAYER_DEFAULT).
+A service can live in a bunch of different layers, you should use this carefully.
+Normal times you just should use one layer for one service.
+
+If you specify a layer, the service won't automatically live in the "default" layer anymore.
+Consider you want to inject the logger service to a service that lives in the controller layer:
+
+    <service id="tg_layer_pr_abundle.controller.example" class="Tg\LayerPr\ABundle\Controller\ExampleController">
+        <layer name="controller" />
+        <argument type="service" id="logger" />
+    </service>
+
+By default you'll get an "InvalidLayerException" because the logger service lives in the default layer.
+The Container comes with the default rule
+
+.. code-block:: php
+
+    $container->getLayerRuleBuilder()
+        ->layerCanDependOn('default', 'default')
+    ;
+
+So it would be possible to move the controller to the default and the controller layer.
+A better approach would be allowing the controller layer to depend on the default layer.
+
+.. code-block:: php
+
+    $container->getLayerRuleBuilder()
+        ->layerCanDependOn('controller', 'default')
+    ;
+
+Defining Software Layers for every Bundle
+--------
+
+Defining a bunch of global rules to enforce service layers could end up in a huge mess.
+Think about a bundle that requires different rules than your bundle.
+
+So it's not recommended to define global rules, instead add rules based on conditions.
+A condition can be everything you could do with the expression language and the list of defined layers.
+
+.. code-block:: php
+
+    public function build(ContainerBuilder $container)
+    {
+        parent::build($container);
+
+        $container->getLayerRuleBuilder()
+            ->child('SomeExampleBundle') // child name is optional.
+                ->when('"SomeExampleBundle" in layers') // any expression
+                ->layerCanDependOn('controller', 'domain')
+                ->layerCanDependOn('domain', 'infrastructure')
+            ->end()
+        ;
+    }
+
+In this case the rules are just enforced by services that lives in the "SomeExampleBundle" layer.
+So you can sandbox any rules for any bundle by using conditions.
+
+This also allows you to enforce more complex cross bundle rules, for example if you're building a bridge between
+Symfony2 and a library.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
